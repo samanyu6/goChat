@@ -5,17 +5,13 @@ import (
 	"fmt"
 
 	"github.com/gorilla/websocket"
-	"github.com/samanyu6/goChat/data"
 )
-
-type ClientManager data.ClientManager
-type Client data.Client
 
 var Manager = ClientManager{
 	Broadcast:  make(chan []byte),
-	Register:   make(chan *data.Client),
-	Unregister: make(chan *data.Client),
-	Clients:    make(map[*data.Client]bool),
+	Register:   make(chan *Client),
+	Unregister: make(chan *Client),
+	Clients:    make(map[*Client]bool),
 }
 
 func (Manager *ClientManager) Start() {
@@ -25,18 +21,18 @@ func (Manager *ClientManager) Start() {
 		// create a new socket conn
 		case Conn := <-Manager.Register:
 			Manager.Clients[Conn] = true
-			jsonMsg, _ := json.Marshal(&data.Message{Content: "New Socket Connection Created. \n"})
+			jsonMsg, _ := json.Marshal(&Message{Content: "New Socket Connection Created. \n"})
 			fmt.Println(jsonMsg)
-			// Manager.send(jsonMsg)
+			Manager.Send(jsonMsg, Conn)
 
 			// remove socket conn for specific client
 		case Conn := <-Manager.Unregister:
 			if _, ok := Manager.Clients[Conn]; ok {
 				close(Conn.Send)
 				delete(Manager.Clients, Conn)
-				jsonMsg, _ := json.Marshal(&data.Message{Content: "Socket Disconnected."})
+				jsonMsg, _ := json.Marshal(&Message{Content: "Socket Disconnected."})
 				fmt.Println(jsonMsg)
-				// Manager.send(jsonMsg, Conn)
+				Manager.Send(jsonMsg, Conn)
 			}
 
 		case msg := <-Manager.Broadcast:
@@ -54,7 +50,7 @@ func (Manager *ClientManager) Start() {
 	}
 }
 
-func (Manager *ClientManager) Send(message []byte, ignore *data.Client) {
+func (Manager *ClientManager) Send(message []byte, ignore *Client) {
 	for Conn := range Manager.Clients {
 		if Conn != ignore {
 			Conn.Send <- message
@@ -64,21 +60,20 @@ func (Manager *ClientManager) Send(message []byte, ignore *data.Client) {
 
 // workaround since you can;t import data types not defined within this package.
 func (c *Client) Read() {
-	c1 := data.Client(*c)
 	defer func() {
-		Manager.Unregister <- &c1
-		c1.Socket.Close()
+		Manager.Unregister <- c
+		c.Socket.Close()
 	}()
 
 	for {
-		_, message, err := c1.Socket.ReadMessage()
+		_, message, err := c.Socket.ReadMessage()
 		if err != nil {
-			Manager.Unregister <- &c1
-			c1.Socket.Close()
+			Manager.Unregister <- c
+			c.Socket.Close()
 			break
 		}
 
-		jsonMsg, _ := json.Marshal(&data.Message{Sender: c1.Id, Content: string(message)})
+		jsonMsg, _ := json.Marshal(&Message{Sender: c.Id, Content: string(message)})
 		Manager.Broadcast <- jsonMsg
 	}
 }

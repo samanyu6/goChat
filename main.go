@@ -6,7 +6,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/samanyu6/goChat/chat"
-	"github.com/samanyu6/goChat/data"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -29,8 +28,7 @@ func talk(res http.ResponseWriter, req *http.Request) {
 	}
 
 	client := &chat.Client{Id: uuid.NewV4().String(), Socket: conn, Send: make(chan []byte)}
-	client2 := data.Client(*client)
-	chat.Manager.Register <- &client2
+	chat.Manager.Register <- client
 
 	go client.Read()
 	go client.Write()
